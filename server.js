@@ -86,6 +86,17 @@ io.on("connection", (socket) => {
             const decoded = jwt.verify(token, JWT_SECRET);
             const senderId = decoded.id;
 
+                // 1. 👇 ADD THIS LINE (This defines 'sender')
+            const sender = await prisma.user.findUnique({
+                where: { id: senderId }
+            });
+
+            // Check if user exists before proceeding (Safety check)
+            if (!sender) {
+                console.log("Sender not found");
+                return;
+            }
+            
             const message = await prisma.message.create({
                 data: { senderId, receiverId, content },
             });
