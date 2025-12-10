@@ -17,6 +17,8 @@ model User {
   latitude         Float?    @db.DoublePrecision
   createdAt        DateTime  @default(now()) @db.Timestamp(6)
 
+  expoPushToken String?
+  
   sentMessages     Message[] @relation("SentMessages")
   receivedMessages Message[] @relation("ReceivedMessages")
 }

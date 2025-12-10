@@ -2,6 +2,7 @@ const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
 const { PrismaClient } = require("@prisma/client");
+const {Expo} = require("expo-server-sdk");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const cors = require("cors");
@@ -9,6 +10,7 @@ require("dotenv").config();
 
 const app = express();
 const prisma = new PrismaClient();
+const expo  = new Expo();
 const server = http.createServer(app);
 const io = new Server(server, {
     cors: {
@@ -20,6 +22,42 @@ app.use(express.json());
 app.use(cors());
 
 const JWT_SECRET = process.env.JWT_SECRET || "supersecretkey";
+
+// Function to send push notification
+async function sendReplyNotification(senderName, receiverId, messageText, chatId) {
+    try {
+        // 1. Get Receiver's Token
+        const receiver = await prisma.user.findUnique({
+            where: { id: parseInt(receiverId) },
+            select: { expoPushToken: true }
+        });
+
+        if (!receiver?.expoPushToken) return;
+
+        // 2. Construct Notification
+        const messages = [{
+            to: receiver.expoPushToken,
+            sound: 'default',
+            title: `New message from ${senderName}`,
+            body: messageText,
+            
+            // CRITICAL: This enables the text box in the notification
+            categoryId: 'chat-reply', 
+            
+            // CRITICAL: This data is sent back to you when they reply
+            data: { 
+                chatId: chatId, 
+                senderId: receiverId // needed for context
+            },
+        }];
+
+        // 3. Send
+        await expo.sendPushNotificationsAsync(messages);
+        console.log("Notification sent to", receiverId);
+    } catch (error) {
+        console.error("Error sending notification:", error);
+    }
+}
 
 // WebSocket handling
 io.on("connection", (socket) => {
@@ -38,6 +76,7 @@ io.on("connection", (socket) => {
             console.log(`User ${decoded.id} authenticated`);
         } catch (error) {
             console.log("Authentication failed");
+            console.log(error);
             socket.disconnect();
         }
     });
@@ -54,6 +93,10 @@ io.on("connection", (socket) => {
             // Emit to both sender and receiver rooms for real-time chat
             io.to(senderId.toString()).emit("receiveMessage", message);
             io.to(receiverId.toString()).emit("receiveMessage", message);
+
+            //send notification
+            sendReplyNotification(sender.username, receiverId, content, senderId);
+
         } catch (error) {
             console.log("Message send failed:", error);
         }
@@ -143,22 +186,10 @@ app.post("/login", async (req, res) => {
     }
 });
 
-app.get("/check-password/:email", async (req, res) => {
-    try {
-        const user = await prisma.user.findUnique({
-            where: { email: req.params.email },
-            select: { password: true }
-        });
-        res.json({ hashedPassword: user?.password });
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
-});
-
 app.get("/users", async (req, res) => {
     try {
         const users = await prisma.user.findMany({
-            select: {
+            select: { 
                 id: true,
                 password: true,
                 username: true,
@@ -357,6 +388,11 @@ app.post("/messages", async (req, res) => {
             }
         });
 
+        io.to(senderId.toString()).emit("receiveMessage", newMessage);
+        io.to(receiverId.toString()).emit("receiveMessage", newMessage);
+
+        sendReplyNotification(newMessage.sender.username, receiverId, content, senderId);
+
         res.json(newMessage);
     } catch (error) {
         console.error("Error creating message:", error);
@@ -398,6 +434,25 @@ app.get("/messages", async (req, res) => {
     } catch (error) {
         console.error("Error fetching messages:", error);
         res.status(500).json({ error: "Failed to fetch messages" });
+    }
+});
+
+app.post("/update-push-token", async (req, res) => {
+    const { userId, token } = req.body;
+    
+    if (!Expo.isExpoPushToken(token)) {
+        return res.status(400).json({ error: "Invalid Expo push token" });
+    }
+
+    try {
+        await prisma.user.update({
+            where: { id: parseInt(userId) },
+            data: { expoPushToken: token },
+        });
+        res.json({ success: true });
+    } catch (error) {
+        console.error("Error updating push token:", error);
+        res.status(500).json({ error: "Failed to update token" });
     }
 });
 
