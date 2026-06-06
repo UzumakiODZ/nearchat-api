@@ -9,26 +9,60 @@ datasource db {
 }
 
 model User {
-  id               Int       @id @default(autoincrement())
-  username         String    @unique @db.VarChar(255)
-  email            String    @unique @db.VarChar(255)
-  password         String    @db.VarChar(255)
-  longitude        Float?    @db.DoublePrecision
-  latitude         Float?    @db.DoublePrecision
-  createdAt        DateTime  @default(now()) @db.Timestamp(6)
-
+  id            Int      @id @default(autoincrement())
+  username      String   @unique @db.VarChar(255)
+  email         String   @unique @db.VarChar(255)
+  password      String   @db.VarChar(255)
+  age           Int?     @db.SmallInt
+  description   String   @db.Text
+  videoUrl      String?  @db.Text
+  longitude     Float?   @db.DoublePrecision
+  latitude      Float?   @db.DoublePrecision
+  createdAt     DateTime @default(now()) @db.Timestamp(6)
   expoPushToken String?
-  
+
+  friendsAsA Friend[]  @relation("FriendUserA")
+  friendsAsB Friend[]  @relation("FriendUserB")
+
+  sentRequests     Request[] @relation("SentRequests")
+  receivedRequests Request[] @relation("ReceivedRequests")
+
   sentMessages     Message[] @relation("SentMessages")
   receivedMessages Message[] @relation("ReceivedMessages")
 }
 
-model Message {
-  id         Int       @id @default(autoincrement())
-  content    String
-  sender     User      @relation("SentMessages", fields: [senderId], references: [id])
+model Friend {
+  id        Int      @id @default(autoincrement())
+  createdAt DateTime @default(now()) @db.Timestamp(6)
+
+  userAId Int
+  userBId Int
+  userA   User @relation("FriendUserA", fields: [userAId], references: [id], map: "Friend_userA_fkey")
+  userB   User @relation("FriendUserB", fields: [userBId], references: [id], map: "Friend_userB_fkey")
+
+  @@unique([userAId, userBId])
+}
+
+model Request {
+  id        Int      @id @default(autoincrement())
+  createdAt DateTime @default(now()) @db.Timestamp(6)
+  status    String   @default("pending")
+
   senderId   Int
-  receiver   User      @relation("ReceivedMessages", fields: [receiverId], references: [id])
   receiverId Int
-  createdAt  DateTime  @default(now()) @db.Timestamp(6)
+  sender   User @relation("SentRequests", fields: [senderId], references: [id])
+  receiver User @relation("ReceivedRequests", fields: [receiverId], references: [id])
+
+  @@unique([senderId, receiverId])
+}
+
+model Message {
+  id        Int      @id @default(autoincrement())
+  content   String
+  createdAt DateTime @default(now()) @db.Timestamp(6)
+
+  senderId   Int
+  receiverId Int
+  sender   User @relation("SentMessages", fields: [senderId], references: [id])
+  receiver User @relation("ReceivedMessages", fields: [receiverId], references: [id])
 }
