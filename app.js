@@ -54,14 +54,9 @@ function generateToken(user) {
 
 //generate refresh token
 function generateRefreshToken(user) {
-    const refreshToken = jwt.sign({id: user.id }, JWT_SECRET, { expiresIn: "7d" });
-    res.cookie("refreshToken", refreshToken, {
-        httpOnly: true,
-        secure: true,
-        sameSite: 'None',
-        maxAge: 24*60*60*1000 // 7 days
-    });
 
+    const refreshToken = jwt.sign({id: user.id }, JWT_SECRET, { expiresIn: "7d" });
+    
     return refreshToken;
 }
 
