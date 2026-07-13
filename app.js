@@ -225,6 +225,13 @@ app.post("/login", async (req, res) => {
         // Remove password from response
         const { password: _, ...userWithoutPassword } = user;
 
+        res.cookie("refreshToken", refreshToken, {
+            httpOnly: true,
+            secure: true,
+            sameSite: "None",
+            maxAge: 7 * 24 * 60 * 60 * 1000,
+        });
+
         res.json({ 
             user: userWithoutPassword, 
             accessToken,
