@@ -175,7 +175,6 @@ app.post("/register", async (req, res) => {
                 email,
                 password: hashedPassword,
                 age,
-                videoUrl,
                 latitude,
                 longitude,
             },
