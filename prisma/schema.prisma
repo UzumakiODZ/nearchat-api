@@ -14,8 +14,12 @@ model User {
   email         String   @unique @db.VarChar(255)
   password      String   @db.VarChar(255)
   age           Int?     @db.SmallInt
-  description   String   @db.Text
+  gender        String?   
+  sexuality     String?
+  preference    String?
+  description   String?  @db.Text
   videoUrl      String?  @db.Text
+  imgUrl        String?  @db.Text
   longitude     Float?   @db.DoublePrecision
   latitude      Float?   @db.DoublePrecision
   createdAt     DateTime @default(now()) @db.Timestamp(6)
