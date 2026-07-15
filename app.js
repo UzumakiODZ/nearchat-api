@@ -345,8 +345,16 @@ app.post("/messages", auth, async (req, res) => {
 
 // Get nearby users
 app.get("/nearby-users", auth, async (req, res) => {
+    const token = req.headers.authorization?.split(' ')[1];
+
+    if (!token) {
+        return res.status(401).json({ error: "Authentication required" });
+    }
+
     const userId = parseInt(req.body.userId, 10);
     const radiusKm = parseFloat(req.body.distance);
+    const sexuality = req.body.sexualtiy;
+    const gender = req.body.gender;
 
     try {
 
@@ -391,6 +399,8 @@ app.get("/nearby-users", auth, async (req, res) => {
                 sin(radians(${latitude})) *
                 sin(radians(latitude))
             )) < ${radiusKm}
+            AND sexuality = ${sexuality}
+            AND gender = ${gender}
             ORDER BY distance;
         `;
 
@@ -404,6 +414,65 @@ app.get("/nearby-users", auth, async (req, res) => {
     }
 });
 
+//Get connestions list
+app.get("/users/connections", auth, async (req, res) => {
+    const userId = parseInt(req.body.userId, 10);
+    const token = req.headers.authorization?.split(' ')[1];
+
+    if (!token) {
+        return res.status(401).json({ error: "Authentication required" });
+    }
+
+    try{
+        const friendships = await prisma.friend.findMany({
+            where: {
+                OR: [
+                { userAId: userId },
+                { userBId: userId },
+                ],
+            },
+            include: {
+                userA: true,
+                userB: true,
+            },
+        });
+
+        const friends = friendships.map((friendship) =>
+        friendship.userAId === userId
+            ? friendship.userB
+            : friendship.userA
+        );
+
+        console.log(friends);
+    }catch (error){
+        console.log(error);
+        res.status(500).json({ error: "Failed to fetch messages" });
+    }
+});
+
+//Get requests list
+app.get("/users/requests", auth, async(req,res) => {
+    const token = req.headers.authorization?.split(' ')[1];
+    const userId = parseInt(req.body.userId, 10);
+
+    if (!token) {
+        return res.status(401).json({ error: "Authentication required" });
+    }
+
+    try{
+        const data = await prisma.request.findMany({
+            where: {
+                receiverId: userId
+            }
+        });
+
+        return data;
+
+    }catch(error){
+        console.log(error);
+        res.status(500).json({ error: "Failed to fetch requests" });
+    }
+})
 
 // Get messages between two users
 app.get("/messages", auth, async (req, res) => {
@@ -450,6 +519,7 @@ app.put("/users/video", auth, upload.single('video'), async (req, res) => {
     if (!token) {
         return res.status(401).json({ error: "Authentication required" });
     }
+
     try {
         const videoBuffer = req.file.buffer;
         const { userId } = req.body;
@@ -506,12 +576,6 @@ app.put("/users/video", auth, upload.single('video'), async (req, res) => {
 
 // Update user location
 app.put("/users/location", auth, async (req, res) => {
-
-    const token = req.headers.authorization?.split(' ')[1];
-
-    if (!token) {
-        return res.status(401).json({ error: "Authentication required" });
-    }
 
     try {
         const { id } = req.body;
@@ -573,7 +637,7 @@ app.put("/update-description", auth, async(req,res) => {
             return res.status(401).json({ error: "Authentication required" });
         }
         const user = await prisma.user.update({
-            where: { userId: parseInt(userId) },
+            where: { userId: Number.parseInt(userId) },
             data: { description},
         });
         res.json(user);
