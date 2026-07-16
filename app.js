@@ -271,48 +271,51 @@ app.post('/refresh',(req, res) => {
 
 //post friend request
 app.post("/send-friend-request", auth, async (req, res) => {
-  const { userId, receiverId } = req.body;
-  try {
+    const userId = req.userId;
+    const {receiverId } = req.body;
+    try {
     await prisma.request.create({
-      data: {
+        data: {
         senderId: userId,
         receiverId: receiverId,
-      },
+        },
     });
 
     return res.status(201).json({ message: "Friend request sent" });
-  } catch (error) {
+    } catch (error) {
     return res.status(400).json({ message: error.message });
-  }
+    }
 });
 
 app.post("/accept-friend-request", auth, async (req, res) => {
-  const { requestId, senderId, receiverId } = req.body;
+    const senderId = req.userID;
+    const { requestId, receiverId } = req.body;
 
-  try {
+    try {
     // Create the friendship
     await prisma.friend.create({
-      data: {
+        data: {
         userAId: senderId,  // was userId which is undefined
         userBId: receiverId,
-      },
+        },
     });
 
     // Delete the request status to accepted
     await prisma.request.delete({
-      where: { id: requestId },
+        where: { id: requestId },
     });
 
     return res.status(201).json({ message: "Friend request accepted" });
-  } catch (error) {
+    } catch (error) {
     return res.status(400).json({ message: error.message });
-  }
+    }
 });
 
 // Create message
 app.post("/messages", auth, async (req, res) => {
     try {
-        const { content, senderId, receiverId } = req.body;
+        const senderId = req.userId;
+        const { content, receiverId } = req.body;
         
         if (!content || !senderId || !receiverId) {
             return res.status(400).json({ error: "Missing required fields" });
@@ -351,7 +354,7 @@ app.get("/nearby-users", auth, async (req, res) => {
         return res.status(401).json({ error: "Authentication required" });
     }
 
-    const userId = parseInt(req.body.userId, 10);
+    const userId = parseInt(req.userId, 10);
     const radiusKm = parseFloat(req.body.distance);
     const sexuality = req.body.sexualtiy;
     const gender = req.body.gender;
@@ -416,7 +419,7 @@ app.get("/nearby-users", auth, async (req, res) => {
 
 //Get connestions list
 app.get("/users/connections", auth, async (req, res) => {
-    const userId = parseInt(req.body.userId, 10);
+    const userId = parseInt(req.userId, 10);
     const token = req.headers.authorization?.split(' ')[1];
 
     if (!token) {
@@ -453,7 +456,7 @@ app.get("/users/connections", auth, async (req, res) => {
 //Get requests list
 app.get("/users/requests", auth, async(req,res) => {
     const token = req.headers.authorization?.split(' ')[1];
-    const userId = parseInt(req.body.userId, 10);
+    const userId = parseInt(req.userId, 10);
 
     if (!token) {
         return res.status(401).json({ error: "Authentication required" });
@@ -477,7 +480,8 @@ app.get("/users/requests", auth, async(req,res) => {
 // Get messages between two users
 app.get("/messages", auth, async (req, res) => {
     try {
-        const { senderId, receiverId } = req.query;
+        const senderId = req.userId;
+        const receiverId = req.query;
         
         if (!senderId || !receiverId) {
             return res.status(400).json({ error: "Missing required parameters" });
@@ -522,7 +526,7 @@ app.put("/users/video", auth, upload.single('video'), async (req, res) => {
 
     try {
         const videoBuffer = req.file.buffer;
-        const { userId } = req.body;
+        const { userId } = req.userId;
 
         const { Readable } = require('stream');
         const inputStream = new Readable();
@@ -578,7 +582,7 @@ app.put("/users/video", auth, upload.single('video'), async (req, res) => {
 app.put("/users/location", auth, async (req, res) => {
 
     try {
-        const { id } = req.body;
+        const { id } = req.userId;
         const { longitude, latitude } = req.body;
 
         const user = await prisma.user.update({
@@ -592,34 +596,6 @@ app.put("/users/location", auth, async (req, res) => {
     }
 });
 
-app.put("/update-video", auth, async(req,res) => {
-
-    const token = req.headers.authorization?.split(' ')[1];
-
-    if (!token) {
-        return res.status(401).json({ error: "Authentication required" });
-    }
-
-    try{
-        const {userId,videoUrl} = req.body();
-        const token = req.headers.authorization?.split(' ')[1];
-
-        if (!token) {
-            return res.status(401).json({ error: "Authentication required" });
-        }
-        const user = await prisma.user.update({
-            where: { userId: parseInt(userId) },
-            data: { videoUrl},
-        });
-        res.json(user);
-    } catch (error){
-        res.status(500).json({
-            error: "Failed to update location",
-            details: process.env.NODE_ENV === 'development' ? error.message : undefined
-        });
-    }
-})
-
 //update user description
 app.put("/update-description", auth, async(req,res) => {
 
@@ -630,7 +606,8 @@ app.put("/update-description", auth, async(req,res) => {
     }
 
     try{
-        const {userId,description} = req.body();
+        const {userId} = req.userId;
+        const {description} = req.body();
         const token = req.headers.authorization?.split(' ')[1];
 
         if (!token) {
@@ -671,7 +648,7 @@ app.put("/update-push-token", async (req, res) => {
 
 // Delete user
 app.delete("/users", auth, async (req, res) => {
-    const { id } = req.body;
+    const { id } = req.userId;
     try {
         await prisma.user.delete({ where: { id: parseInt(id) } });
         res.status(204).send();
