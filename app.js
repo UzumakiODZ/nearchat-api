@@ -55,8 +55,8 @@ function generateToken(user) {
 //generate refresh token
 function generateRefreshToken(user) {
 
-    const refreshToken = jwt.sign({id: user.userId}, JWT_SECRET, { expiresIn: "7d" });
-    
+    const refreshToken = jwt.sign({ id: user.id }, JWT_SECRET, { expiresIn: "7d" });
+
     return refreshToken;
 }
 
@@ -78,13 +78,11 @@ async function sendReplyNotification(senderName, receiverId, messageText, chatId
             title: `New message from ${senderName}`,
             body: messageText,
             
-            // CRITICAL: This enables the text box in the notification
             categoryId: 'chat-reply', 
             
-            // CRITICAL: This data is sent back to you when they reply
             data: { 
                 chatId: chatId, 
-                senderId: receiverId // needed for context
+                senderId: receiverId
             },
         }];
 
@@ -230,7 +228,7 @@ app.post("/login", async (req, res) => {
         res.json({ 
             user: userWithoutPassword, 
             accessToken,
-            userId: user.id 
+            userId: user.id  
         });
 
     } catch (error) {
@@ -239,39 +237,40 @@ app.post("/login", async (req, res) => {
     }
 });
 
-app.post('/refresh',(req, res) => {
-    if (req.cookies?.jwt) {
+app.post('/refresh', async (req, res) => {
+    const refreshToken = req.cookies?.refreshToken;
 
-        // Destructuring refreshToken from cookie
-        const refreshToken = req.cookies.jwt;
-
-        // Verifying refresh token
-        jwt.verify(refreshToken, process.env.REFRESH_TOKEN_SECRET,
-            (err, decoded) => {
-                if (err) {
-
-                    // Wrong Refesh Token
-                    return res.status(406).json({ message: 'Unauthorized' });
-                }
-                else {
-                    // Correct token we send a new access token
-                    const accessToken = jwt.sign({
-                        username: userCredentials.username,
-                        email: userCredentials.email
-                    }, process.env.ACCESS_TOKEN_SECRET, {
-                        expiresIn: '10m'
-                    });
-                    return res.json({ accessToken });
-                }
-            })
-    } else {
-        return res.status(406).json({ message: 'Unauthorized' });
+    if (!refreshToken) {
+        return res.status(401).json({ error: "Unauthorized" });
     }
+
+    jwt.verify(refreshToken, JWT_SECRET, async (err, decoded) => {
+        if (err) {
+            return res.status(401).json({ error: "Unauthorized" });
+        }
+
+        try {
+            const user = await prisma.user.findUnique({
+                where: { id: decoded.id },
+                select: { id: true }
+            });
+
+            if (!user) {
+                return res.status(401).json({ error: "Unauthorized" });
+            }
+
+            const accessToken = generateToken(user);
+            return res.json({ accessToken });
+        } catch (error) {
+            console.error("Refresh error:", error);
+            return res.status(500).json({ error: "Failed to refresh token" });
+        }
+    });
 });
 
 //post friend request
 app.post("/send-friend-request", auth, async (req, res) => {
-    const userId = req.userId;
+    const userId = req.id;
     const {receiverId } = req.body;
     try {
     await prisma.request.create({
@@ -288,14 +287,14 @@ app.post("/send-friend-request", auth, async (req, res) => {
 });
 
 app.post("/accept-friend-request", auth, async (req, res) => {
-    const senderId = req.userID;
+    const senderId = req.id;
     const { requestId, receiverId } = req.body;
 
     try {
     // Create the friendship
     await prisma.friend.create({
         data: {
-        userAId: senderId,  // was userId which is undefined
+        userAId: senderId,
         userBId: receiverId,
         },
     });
@@ -314,7 +313,7 @@ app.post("/accept-friend-request", auth, async (req, res) => {
 // Create message
 app.post("/messages", auth, async (req, res) => {
     try {
-        const senderId = req.userId;
+        const senderId = req.id;
         const { content, receiverId } = req.body;
         
         if (!content || !senderId || !receiverId) {
@@ -354,7 +353,7 @@ app.get("/nearby-users", auth, async (req, res) => {
         return res.status(401).json({ error: "Authentication required" });
     }
 
-    const userId = parseInt(req.userId, 10);
+    const userId = parseInt(req.id, 10);
     const radiusKm = parseFloat(req.body.distance);
     const sexuality = req.body.sexualtiy;
     const gender = req.body.gender;
@@ -419,7 +418,7 @@ app.get("/nearby-users", auth, async (req, res) => {
 
 //Get connestions list
 app.get("/users/connections", auth, async (req, res) => {
-    const userId = parseInt(req.userId, 10);
+    const userId = parseInt(req.id, 10);
     const token = req.headers.authorization?.split(' ')[1];
 
     if (!token) {
@@ -446,7 +445,7 @@ app.get("/users/connections", auth, async (req, res) => {
             : friendship.userA
         );
 
-        console.log(friends);
+        res.json(friends);
     }catch (error){
         console.log(error);
         res.status(500).json({ error: "Failed to fetch messages" });
@@ -456,7 +455,7 @@ app.get("/users/connections", auth, async (req, res) => {
 //Get requests list
 app.get("/users/requests", auth, async(req,res) => {
     const token = req.headers.authorization?.split(' ')[1];
-    const userId = parseInt(req.userId, 10);
+    const userId = parseInt(req.id, 10);
 
     if (!token) {
         return res.status(401).json({ error: "Authentication required" });
@@ -469,7 +468,7 @@ app.get("/users/requests", auth, async(req,res) => {
             }
         });
 
-        return data;
+        return res.json(data);
 
     }catch(error){
         console.log(error);
@@ -480,8 +479,8 @@ app.get("/users/requests", auth, async(req,res) => {
 // Get messages between two users
 app.get("/messages", auth, async (req, res) => {
     try {
-        const senderId = req.userId;
-        const receiverId = req.query;
+        const senderId = req.id;
+        const receiverId = req.query.receiverId;
         
         if (!senderId || !receiverId) {
             return res.status(400).json({ error: "Missing required parameters" });
@@ -526,7 +525,7 @@ app.put("/users/video", auth, upload.single('video'), async (req, res) => {
 
     try {
         const videoBuffer = req.file.buffer;
-        const { userId } = req.userId;
+        const userId = req.id;
 
         const { Readable } = require('stream');
         const inputStream = new Readable();
@@ -582,7 +581,7 @@ app.put("/users/video", auth, upload.single('video'), async (req, res) => {
 app.put("/users/location", auth, async (req, res) => {
 
     try {
-        const { id } = req.userId;
+        const id = req.id;
         const { longitude, latitude } = req.body;
 
         const user = await prisma.user.update({
@@ -606,16 +605,12 @@ app.put("/update-description", auth, async(req,res) => {
     }
 
     try{
-        const {userId} = req.userId;
-        const {description} = req.body();
-        const token = req.headers.authorization?.split(' ')[1];
+        const userId = req.id;
+        const { description } = req.body;
 
-        if (!token) {
-            return res.status(401).json({ error: "Authentication required" });
-        }
         const user = await prisma.user.update({
-            where: { userId: Number.parseInt(userId) },
-            data: { description},
+            where: { id: Number.parseInt(userId) },
+            data: { description },
         });
         res.json(user);
     } catch (error){
@@ -648,7 +643,7 @@ app.put("/update-push-token", async (req, res) => {
 
 // Delete user
 app.delete("/users", auth, async (req, res) => {
-    const { id } = req.userId;
+    const id = req.id;
     try {
         await prisma.user.delete({ where: { id: parseInt(id) } });
         res.status(204).send();
@@ -659,4 +654,3 @@ app.delete("/users", auth, async (req, res) => {
 });
 
 module.exports = app;
-

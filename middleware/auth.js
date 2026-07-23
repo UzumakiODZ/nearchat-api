@@ -10,7 +10,7 @@ function auth(req, res, next) {
 
     try {
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
-        req.userId = decoded.userId;
+        req.id = decoded.id;
         next();
     } catch (err) {
         if (err instanceof jwt.TokenExpiredError || err instanceof jwt.JsonWebTokenError) {
