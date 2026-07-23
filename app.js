@@ -55,7 +55,7 @@ function generateToken(user) {
 //generate refresh token
 function generateRefreshToken(user) {
 
-    const refreshToken = jwt.sign({id: user.id }, JWT_SECRET, { expiresIn: "7d" });
+    const refreshToken = jwt.sign({id: user.userId}, JWT_SECRET, { expiresIn: "7d" });
     
     return refreshToken;
 }
